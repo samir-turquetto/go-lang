@@ -1,32 +1,22 @@
 package handler
 
 import (
-	"api/golang/internal/db"
-	"api/golang/pkg"
+	"facec/blog/internal/container"
+	"facec/blog/pkg"
 	"fmt"
 	"io"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-var postRepository = db.PostRepository{}
+const paramId = "id"
 
 func GetPosts(c *gin.Context) {
 	titleParam := c.Query("title")
-
-	posts := make([]pkg.Post, 0)
-	for _, v := range postRepository.FindPosts(titleParam) {
-		if len(titleParam) > 0 && !strings.Contains(v.Title, titleParam) {
-			continue
-		}
-
-		posts = append(posts, *v)
-	}
-
+	posts := container.PostRepository.FindPosts(titleParam)
 	c.JSON(200, posts)
 }
 
@@ -45,14 +35,14 @@ func CreatePost(c *gin.Context) {
 		DateTime: time.Now(),
 	}
 
-	postRepository.InsertPost(post)
+	container.PostRepository.InsertPost(post)
 	log.Println(fmt.Sprintf("post %s created", post))
 
 	c.JSON(201, post)
 }
 
 func UpdatePost(c *gin.Context) {
-	post, responseError := findPost(c)
+	post, responseError := findPost(c, paramId)
 	if responseError != nil {
 		c.JSON(404, responseError)
 		return
@@ -69,11 +59,13 @@ func UpdatePost(c *gin.Context) {
 	post.User = requestPost.User
 	post.DateTime = time.Now()
 
+	container.PostRepository.Update(post)
+
 	c.JSON(200, post)
 }
 
 func PartialUpdatePost(c *gin.Context) {
-	post, responseError := findPost(c)
+	post, responseError := findPost(c, paramId)
 	if responseError != nil {
 		c.JSON(404, responseError)
 		return
@@ -104,25 +96,24 @@ func PartialUpdatePost(c *gin.Context) {
 		post.User = *partialRequest.User
 	}
 
+	container.PostRepository.PartialUpdate(post)
+
 	c.JSON(204, "")
 }
 
 func DeletePost(c *gin.Context) {
-	post, responseError := findPost(c)
-
+	post, responseError := findPost(c, paramId)
 	if responseError != nil {
 		c.JSON(404, responseError)
 		return
 	}
 
-	delete(postMap, post.Id.String())
-
+	container.PostRepository.DeletePost(post.Id.String())
 	c.JSON(204, "")
 }
 
 func GetPost(c *gin.Context) {
-	post, responseError := findPost(c)
-
+	post, responseError := findPost(c, paramId)
 	if responseError != nil {
 		c.JSON(404, responseError)
 		return
@@ -145,17 +136,4 @@ func parseBody(c *gin.Context) (*pkg.RequestPost, *pkg.ResponseError) {
 	}
 
 	return &requestPost, nil
-}
-
-func findPost(c *gin.Context) (*pkg.Post, *pkg.ResponseError) {
-	id := c.Param("id")
-	post := postMap[id]
-	if post == nil {
-		return nil, &pkg.ResponseError{
-			Cause:   "id not found",
-			Message: fmt.Sprintf("id %s not found", id),
-		}
-	}
-
-	return post, nil
 }
